@@ -54,6 +54,13 @@ def get_base_argument_parser() -> argparse.ArgumentParser:
         default=None,
         help='condition image path',
     )
+    
+    parser.add_argument(
+        '--img',
+        type=str,
+        default=None,
+        help='your init image path'
+    )
 
     parser.add_argument(
         '--cond_inp_type',
@@ -297,11 +304,18 @@ def diffusion_inference(opt, model, sampler, adapter_features, append_to_context
     # print(f'list length after fixing: {len(c)}, {len(uc)}')
     
     # [0] if isinstance(c, list) else uc
-
+    
     if not hasattr(opt, 'H'):
         opt.H = 512
         opt.W = 512
     shape = [opt.C, opt.H // opt.f, opt.W // opt.f]
+    
+    if opt.img != None:
+        assert os.path.isfile(opt.init_img)
+        init_image = load_img(opt.init_img).to(device)
+        init_image = repeat(init_image, '1 ... -> b ...', b=opt.C)
+        init_latent = model.get_first_stage_encoding(model.encode_first_stage(init_image))  # move to latent space
+    
     samples_latents, _ = sampler.sample(
         S=opt.steps,
         ori_conditioning=ori_c,
@@ -312,7 +326,7 @@ def diffusion_inference(opt, model, sampler, adapter_features, append_to_context
         unconditional_guidance_scale=opt.scale,
         ori_unconditional_conditioning=ori_uc,
         unconditional_conditioning=uc,
-        x_T=None,
+        x_T=None if opt.img is None else init_latent,
         features_adapter=adapter_features,
         append_to_context=append_to_context,
         cond_tau=opt.cond_tau,

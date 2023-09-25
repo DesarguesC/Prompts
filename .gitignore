@@ -8,6 +8,9 @@ nlpconnect/vit-gpt2-image-captioning/
 experiments/*
 outputs/*
 inputs/*
+log/*
+logrus/*
+
 
 *.DS_Store
 .idea
