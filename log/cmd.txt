@@ -1,0 +1,7 @@
+python test_adapter.py --prompt "A photograph: the ball is on the palyground. The ball is blue. The ball is on the left of the picture. "  --sd_ckpt /root/autodl-tmp/models/v1-5-pruned.ckpt --n_samples 2 --outdir outputs/overlay/7/yes --overlay yes --o_dim 1 --wei yes
+
+
+
+
+
+v1-5-pruned-emaonly.ckpt

@@ -1,0 +1,3 @@
+A photograph: the ball is on the palyground. The ball is blue. The ball is on the left of the picture. 
+
+(add weights)
