@@ -132,7 +132,7 @@ class DDIMSampler(object):
                                                     features_adapter=features_adapter,
                                                     append_to_context=append_to_context,
                                                     cond_tau=cond_tau,
-                                                    style_cond_tau=style_cond_tau, t1=time_1, t2=time_t2
+                                                    style_cond_tau=style_cond_tau, t1=time_t1, t2=time_t2
                                                     )
         return samples, intermediates
 
@@ -204,8 +204,8 @@ class DDIMSampler(object):
     @torch.no_grad()
     def p_sample_ddim(self, x, ori_c, c, t, index, repeat_noise=False, use_original_steps=False, quantize_denoised=False,
                       temperature=1., noise_dropout=0., score_corrector=None, corrector_kwargs=None,
-                      unconditional_guidance_scale=1., unconditional_conditioning=None, features_adapter=None,
-                      append_to_context=None, **kwargs):
+                      unconditional_guidance_scale=1., ori_unconditional_conditioning=None, unconditional_conditioning=None, 
+                      features_adapter=None, append_to_context=None, **kwargs):
         b, *_, device = *x.shape, x.device
         assert isinstance(unconditional_conditioning, list), 'fixed???'
         # to_cut = kwargs['to_cut'] if 'to_cut' in kwargs else False
@@ -243,7 +243,7 @@ class DDIMSampler(object):
                     model_output = [self.model.apply_model \
                                     (x, t, c_, features_adapter=features_adapter) for c_ in c if c_ != None]
             elif t > t1 and t <= t2:
-                prompt_conditioning = torch.cat([pp for pp in condition_], dim=1)
+                prompt_conditioning = torch.cat([pp for pp in c], dim=1)
                 if append_to_context is not None:
                     model_output = self.model.apply_model(x, t, torch.cat([prompt_conditioning, append_to_context], dim=1),
                                                           features_adapter=features_adapter)

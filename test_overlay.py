@@ -35,18 +35,18 @@ def main():
         default=0,
         help='whether to overlay prompts that are cut',   # cut symbol: '|'
     )
-    parser.add_argument(
-        '--o_dim',
-        type=int,
-        default=0,
-        help='torch cat dim'
-    )
-    parser.add_argument(
-        '--wei',
-        type=str2bool,
-        default=0,
-        help='whether to add weights to each layer when using overlay mode'
-    )
+    # parser.add_argument(
+    #     '--o_dim',
+    #     type=int,
+    #     default=0,
+    #     help='torch cat dim'
+    # )
+    # parser.add_argument(
+    #     '--wei',
+    #     type=str2bool,
+    #     default=0,
+    #     help='whether to add weights to each layer when using overlay mode'
+    # )
     parser.add_argument(
         '--time_t1',
         type=int,
@@ -67,7 +67,7 @@ def main():
         opt.outdir = f'outputs/test-{which_cond}/' + opt.adapter_ckpt.split('/')[-1].strip('.pth')
     os.makedirs(opt.outdir, exist_ok=True)
     if opt.resize_short_edge is None:
-        print(f"you don't specify the resize_shot_edge, so the maximum resolution is set to {opt.max_resolution}")
+        print(f"you don't specify the resize_short_edge, so the maximum resolution is set to {opt.max_resolution}")
     opt.device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
     assert max(opt.time_t1, opt.time_t2) <= opt.steps and opt.time_t1 <= opt.time_t2, 'time step error'
@@ -117,7 +117,7 @@ def main():
                 adapter_features, append_to_context = get_adapter_feature(cond, adapter) if cond != None else (None, None)
                 opt.prompt = prompt
                 result = diffusion_inference(opt, sd_model, sampler, adapter_features, append_to_context)
-                cv2.imwrite(os.path.join(opt.outdir, f'{base_count:05}_{opt.overlay}_useW={opt.wei}_({opt.time_t1},{opt.time_t2}).png'), tensor2img(result))
+                cv2.imwrite(os.path.join(opt.outdir, f'{base_count:05}_{opt.steps}_({opt.time_t1},{opt.time_t2}).png'), tensor2img(result))
 
 
 if __name__ == '__main__':
