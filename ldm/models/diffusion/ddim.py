@@ -57,6 +57,7 @@ class DDIMSampler(object):
                S,
                batch_size,
                shape,
+               ori_conditioning=None,
                conditioning=None,
                callback=None,
                normals_sequence=None,
@@ -73,6 +74,7 @@ class DDIMSampler(object):
                x_T=None,
                log_every_t=100,
                unconditional_guidance_scale=1.,
+               ori_unconditional_conditioning=None,
                unconditional_conditioning=None,
                features_adapter=None,
                append_to_context=None,
@@ -90,6 +92,15 @@ class DDIMSampler(object):
             else:
                 if conditioning_.shape[0] != batch_size:
                     print(f"Warning: Got {conditioning_.shape[0]} conditionings but batch-size is {batch_size}")
+        if ori_conditioning is not None:
+            conditioning_ = conditioning[0] if isinstance(conditioning, list) else conditioning
+            if isinstance(conditioning_, dict):
+                cbs = ori_conditioning[list(ori_conditioning.keys())[0]].shape[0]
+                if cbs != batch_size:
+                    print(f"Warning: Got {cbs} conditionings but batch-size is {batch_size}")
+            else:
+                if ori_conditioning.shape[0] != batch_size:
+                    print(f"Warning: Got {ori_conditioning.shape[0]} conditionings but batch-size is {batch_size}")
 
                     
         self.make_schedule(ddim_num_steps=S, ddim_eta=eta, verbose=verbose)
@@ -98,10 +109,12 @@ class DDIMSampler(object):
         size = (batch_size, C, H, W)
         print(f'Data shape for DDIM sampling is {size}, eta {eta}')
         
-        to_cut = kwargs['to_cut'] if 'to_cut' in kwargs.keys() else False
-        overlay = kwargs['overlay'] if 'overlay' in kwargs.keys() else False
+        # to_cut = kwargs['to_cut'] if 'to_cut' in kwargs.keys() else False
+        # overlay = kwargs['overlay'] if 'overlay' in kwargs.keys() else False
+        time_t1 = kwargs['time_t1'] if 'time_t1' in kwargs.keys() else 0
+        time_t2 = kwargs['time_t2'] if 'time_t2' in kwargs.keys() else 1
         
-        samples, intermediates = self.ddim_sampling(conditioning, size,
+        samples, intermediates = self.ddim_sampling(ori_conditioning, conditioning, size,
                                                     callback=callback,
                                                     img_callback=img_callback,
                                                     quantize_denoised=quantize_x0,
@@ -114,27 +127,30 @@ class DDIMSampler(object):
                                                     x_T=x_T,
                                                     log_every_t=log_every_t,
                                                     unconditional_guidance_scale=unconditional_guidance_scale,
+                                                    ori_unconditional_conditioning=ori_unconditional_conditioning,
                                                     unconditional_conditioning=unconditional_conditioning,
                                                     features_adapter=features_adapter,
                                                     append_to_context=append_to_context,
                                                     cond_tau=cond_tau,
-                                                    style_cond_tau=style_cond_tau, to_cut=to_cut, overlay=overlay
+                                                    style_cond_tau=style_cond_tau, t1=time_1, t2=time_t2
                                                     )
         return samples, intermediates
 
     @torch.no_grad()
-    def ddim_sampling(self, cond, shape,
+    def ddim_sampling(self, ori_cond, cond, shape,
                       x_T=None, ddim_use_original_steps=False,
                       callback=None, timesteps=None, quantize_denoised=False,
                       mask=None, x0=None, img_callback=None, log_every_t=100,
                       temperature=1., noise_dropout=0., score_corrector=None, corrector_kwargs=None,
-                      unconditional_guidance_scale=1., unconditional_conditioning=None, features_adapter=None,
-                      append_to_context=None, cond_tau=0.4, style_cond_tau=1.0, **kwargs):
+                      unconditional_guidance_scale=1., ori_unconditional_conditioning=None, unconditional_conditioning=None, 
+                      features_adapter=None, append_to_context=None, cond_tau=0.4, style_cond_tau=1.0, **kwargs):
         device = self.model.betas.device
         b = shape[0]
         
-        to_cut = kwargs['to_cut'] if 'to_cut' in kwargs.keys() else False
-        overlay = kwargs['overlay'] if 'overlay' in kwargs else False
+        # to_cut = kwargs['to_cut'] if 'to_cut' in kwargs.keys() else False
+        # overlay = kwargs['overlay'] if 'overlay' in kwargs else False
+        t1 = kwargs['t1'] if 't1' in kwargs.keys() else 0
+        t2 = kwargs['t2'] if 't2' in kwargs.keys() else 1
         
         if x_T is None:
             img = torch.randn(shape, device=device)
@@ -163,7 +179,7 @@ class DDIMSampler(object):
                 img_orig = self.model.q_sample(x0, ts)  # TODO: deterministic forward pass?
                 img = img_orig * mask + (1. - mask) * img
 
-            outs = self.p_sample_ddim(img, cond, ts, index=index, use_original_steps=ddim_use_original_steps,
+            outs = self.p_sample_ddim(img, ori_cond, cond, ts, index=index, use_original_steps=ddim_use_original_steps,
                                       quantize_denoised=quantize_denoised, temperature=temperature,
                                       noise_dropout=noise_dropout, score_corrector=score_corrector,
                                       corrector_kwargs=corrector_kwargs,
@@ -173,7 +189,7 @@ class DDIMSampler(object):
                                           (1 - cond_tau) * total_steps) else features_adapter,
                                       append_to_context=None if index < int(
                                           (1 - style_cond_tau) * total_steps) else append_to_context,
-                                      to_cut=to_cut, overlay=overlay
+                                      t1=t1,t2=t2
                                       )
             img, pred_x0 = outs
             if callback: callback(i)
@@ -186,25 +202,34 @@ class DDIMSampler(object):
         return img, intermediates
 
     @torch.no_grad()
-    def p_sample_ddim(self, x, c, t, index, repeat_noise=False, use_original_steps=False, quantize_denoised=False,
+    def p_sample_ddim(self, x, ori_c, c, t, index, repeat_noise=False, use_original_steps=False, quantize_denoised=False,
                       temperature=1., noise_dropout=0., score_corrector=None, corrector_kwargs=None,
                       unconditional_guidance_scale=1., unconditional_conditioning=None, features_adapter=None,
                       append_to_context=None, **kwargs):
         b, *_, device = *x.shape, x.device
+        assert isinstance(unconditional_conditioning, list), 'fixed???'
+        # to_cut = kwargs['to_cut'] if 'to_cut' in kwargs else False
+        # overlay = kwargs['overlay'] if 'overlay' in kwargs else False
+        t1 = kwargs['t1'] if 't1' in kwargs.keys() else 0
+        t2 = kwargs['t2'] if 't2' in kwargs.keys() else 1
         
-        to_cut = kwargs['to_cut'] if 'to_cut' in kwargs else False
-        overlay = kwargs['overlay'] if 'overlay' in kwargs else False
+        if isinstance(c, list):
+            assert isinstance(unconditional_conditioning, list), 'cut failed assertion'
+        else:
+            assert not isinstance(unconditional_conditioning, list), 'original error'
+            assert len(c)==len(unconditional_conditioning), 'length error exsits in fix_shape function'
 
-        if unconditional_conditioning is None or unconditional_guidance_scale == 1.:
-            if not to_cut:
+        if ori_unconditional_conditioning is None or unconditional_conditioning is None \
+                                                            or unconditional_guidance_scale == 1.:
+            if t > t2:
                 # not to cut prompt => model_output is ought to be not a list
                 if append_to_context is not None:
-                    model_output = self.model.apply_model(x, t, torch.cat([c, append_to_context], dim=1),
+                    model_output = self.model.apply_model(x, t, torch.cat([ori_c, append_to_context], dim=1),
                                                           features_adapter=features_adapter)
                 else:
-                    model_output = self.model.apply_model(x, t, c, features_adapter=features_adapter)
+                    model_output = self.model.apply_model(x, t, ori_c, features_adapter=features_adapter)
                     
-            elif to_cut and not overlay:
+            elif t <= t1:
                 # prompt cut
                 if isinstance(c, list):
                     assert isinstance(unconditioinal_conditioning, list), 'cut failed assertion'
@@ -217,9 +242,54 @@ class DDIMSampler(object):
                 else:
                     model_output = [self.model.apply_model \
                                     (x, t, c_, features_adapter=features_adapter) for c_ in c if c_ != None]
+            elif t > t1 and t <= t2:
+                prompt_conditioning = torch.cat([pp for pp in condition_], dim=1)
+                if append_to_context is not None:
+                    model_output = self.model.apply_model(x, t, torch.cat([prompt_conditioning, append_to_context], dim=1),
+                                                          features_adapter=features_adapter)
+                else:
+                    model_output = self.model.apply_model(x, t, prompt_conditioning, features_adapter=features_adapter)
+                
+                
                     
         else:
-            if not to_cut:
+            if t > t2:
+                x_in = torch.cat([x] * 2)
+                t_in = torch.cat([t] * 2)
+                if isinstance(ori_c, dict):
+                    assert isinstance(ori_unconditional_conditioning, dict)
+                    c_in = dict()
+                    for k in ori_c:
+                        if isinstance(ori_c[k], list):
+                            c_in[k] = [torch.cat([
+                                ori_unconditional_conditioning[k][i],
+                                ori_c[k][i]]) for i in range(len(ori_c[k]))]
+                        else:
+                            c_in[k] = torch.cat([
+                                ori_unconditional_conditioning[k],
+                                ori_c[k]])
+                elif isinstance(c, list):
+                    c_in = list()
+                    assert isinstance(ori_unconditional_conditioning, list)
+                    for i in range(len(ori_c)):
+                        c_in.append(torch.cat([ori_unconditional_conditioning[i], ori_c[i]]))
+                else:
+                    if append_to_context is not None:
+                        pad_len = append_to_context.size(1)
+                        new_unconditional_conditioning = torch.cat(
+                            [ori_unconditional_conditioning, ori_unconditional_conditioning[:, -pad_len:, :]], dim=1)
+                        new_c = torch.cat([ori_c, append_to_context], dim=1)
+                        c_in = torch.cat([new_unconditional_conditioning, new_c])
+                    else:
+                        c_in = torch.cat([ori_unconditional_conditioning, ori_c])
+                model_uncond, model_t = self.model.apply_model(x_in, t_in, c_in, features_adapter=features_adapter).chunk(2)
+                model_output = model_uncond + unconditional_guidance_scale * (model_t - model_uncond)
+            
+            elif t1 < t and t <= t2:
+                # overlay => torch.cat
+                c = torch.cat([pp for pp in c], dim=1)
+                unconditional_conditioning = torch.cat([pp for pp in unconditional_conditioning], dim=1)
+                
                 x_in = torch.cat([x] * 2)
                 t_in = torch.cat([t] * 2)
                 if isinstance(c, dict):
@@ -251,9 +321,9 @@ class DDIMSampler(object):
                 model_uncond, model_t = self.model.apply_model(x_in, t_in, c_in, features_adapter=features_adapter).chunk(2)
                 model_output = model_uncond + unconditional_guidance_scale * (model_t - model_uncond)
             
-            elif to_cut and not overlay:
+            elif t <= t1:
                 
-                # prompt cut
+                # list sum
                 if isinstance(c, list):
                     assert isinstance(unconditional_conditioning, list), 'cut failed assertion'
                 else:
@@ -294,26 +364,31 @@ class DDIMSampler(object):
                             c_in = torch.cat([unconditional_conditioning[p], c_])
                     model_uncond, model_t = self.model.apply_model(x_in, t_in, c_in, features_adapter=features_adapter).chunk(2)
                     model_output.append(model_uncond + unconditional_guidance_scale * (model_t - model_uncond))
-                
-        assert len(c) == len(model_output), 'appendance error'
+            
+        # assert len(c) == len(model_output), 'appendance error'
         
         if self.model.parameterization == "v":
-            if not to_cut:
+            if t > t1:
+                # case - 't <= t2 and t > t2' included
                 e_t = self.model.predict_eps_from_z_and_v(x, t, model_output)
-            else:
+            elif t <= t1:
                 e_t = sum([self.model.predict_eps_from_z_and_v(x, t, _output_) for _output_ in model_output]) / torch.tensor([len(model_output)*1.], dtype=torch.float32).sqrt().to(device)  # float32 or float64 ?
+            elif t > t1 and t <= t2:
+                pass
         
         else:
-            if not to_cut:
+            if t > t1:
+                # case - 't <= t2 and t > t2' included
                 e_t = model_output
-            else:
+            elif t <= t1:
                 e_t = sum([_output_ for _output_ in model_output]) / torch.tensor([len(model_output)*1.], dtype=torch.float32).sqrt().to(device)
 
         if score_corrector is not None:
             assert self.model.parameterization == "eps", 'not implemented'
-            if not isinstance(c, list):
+            if t > t1:
+                # case - 't <= t2 and t > t2' included
                 e_t = score_corrector.modify_score(self.model, e_t, x, t, c, **corrector_kwargs)
-            else:
+            elif t <= t1:
                 e_t = sum([score_corrector.modify_score(self.model, e_t, x, t, c__, **corrector_kwargs) for c__ in c]) / torch.tensor([len(c)*1.], dtype=torch.float32).sqrt().to(device)
 
         alphas = self.model.alphas_cumprod if use_original_steps else self.ddim_alphas

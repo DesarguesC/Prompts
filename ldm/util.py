@@ -195,50 +195,46 @@ def resize_numpy_image(image, max_resolution=512 * 512, resize_short_edge=None, 
 # make uc and prompt shapes match via padding for long prompts
 null_cond = None
 
-def fix_cond_shapes(model, prompt_condition, uc, overlay=False, use_weights=False, dim=0):
-    # uc here never will never be a list
+def fix_cond_shapes(model, ori_prompt_condition, prompt_condition, uc, overlay=True, use_weights=False, dim=1) \
+    -> (torch.tensor, torch.tensor, list, list):
+    # uc here will never be a list
+    
     if uc is None:
-        return prompt_condition, uc
+        return ori_prompt_condition, prompt_condition, uc
     global null_cond
     if null_cond is None:
         null_cond = model.get_learned_conditioning([""])
     
-    if not overlay:
-        while prompt_condition.shape[1] > uc.shape[1]:
-            uc = torch.cat((uc, null_cond.repeat((uc.shape[0], 1, 1))), axis=1)
-        while prompt_condition.shape[1] < uc.shape[1]:
-            prompt_condition = torch.cat((prompt_condition, null_cond.repeat((prompt_condition.shape[0], 1, 1))), axis=1)
-        print('no to cut: ', prompt_condition.shape, uc.shape)
+    ori_uc = uc
+    while ori_prompt_condition.shape[1] > ori_uc.shape[1]:
+        ori_uc = torch.cat((ori_uc, null_cond.repeat((ori_uc.shape[0], 1, 1))), axis=1)
+    while ori_prompt_condition.shape[1] < ori_uc.shape[1]:
+        ori_prompt_condition = torch.cat((ori_prompt_condition, null_cond.repeat((ori_prompt_condition.shape[0], 1, 1))), axis=1)
+    # print('no to cut: ', prompt_condition.shape, uc.shape)
         
-    else:
-        assert isinstance(prompt_condition, list), 'list type error'
-        # assert len(uc) == len(prompt_condition), 'length error when fixing'
-        uc_ = []
-        condition_ = []
+    
+    assert isinstance(prompt_condition, list), 'list type error'
+    # a cut prompt
+    uc_ = []
+    condition_ = []
+
+    for i in range(len(prompt_condition)):
+        prompt = prompt_condition[i]
+        x = uc
+        # print('op: ', prompt)
+        while prompt.shape[1] > x.shape[1]:
+            x = torch.cat((x, null_cond.repeat((x.shape[0], 1, 1))), axis=1)
+        if len(x.shape) < 3:
+            x = x.unsqueeze(0)
+        uc_.append(x)
+        while prompt.shape[1] < x.shape[1]:
+            prompt = torch.cat((prompt, null_cond.repeat((prompt.shape[0], 1, 1))), axis=1)
+        condition_.append(prompt)
+    assert len(uc_) == len(condition_), 'length error when fixing'
         
-        for i in range(len(prompt_condition)):
-            prompt = prompt_condition[i]
-            x = uc
-            # print('op: ', prompt)
-            while prompt.shape[1] > x.shape[1]:
-                x = torch.cat((x, null_cond.repeat((x.shape[0], 1, 1))), axis=1)
-            if len(x.shape) < 3:
-                x = x.unsqueeze(0)
-            uc_.append(x)
-            while prompt.shape[1] < x.shape[1]:
-                prompt = torch.cat((prompt, null_cond.repeat((prompt.shape[0], 1, 1))), axis=1)
-            condition_.append(prompt)
-        assert len(uc_) == len(condition_), 'length error when fixing'
-            
-        for i in condition_:
-            print(i.shape)
+        # prompt_condition = torch.cat([pp for pp in condition_], dim) if not use_weights else \
+        #                                             torch.cat([i*1.*condition_[i] for i in range(len(condition_))], dim)
         
+        # uc = torch.cat([uu for uu in uc_], dim)
         
-        prompt_condition = torch.cat([pp for pp in condition_], dim) if not use_weights else \
-                                                    torch.cat([i*1.*condition_[i] for i in range(len(condition_))], dim)
-        
-        # now it's consistent weights, it's possible to train a new model.
-        
-        uc = torch.cat([uu for uu in uc_], dim)
-        
-    return (prompt_condition, uc)
+    return ori_prompt_condition, ori_uc, condition_, uc_

@@ -47,6 +47,18 @@ def main():
         default=0,
         help='whether to add weights to each layer when using overlay mode'
     )
+    parser.add_argument(
+        '--time_t1',
+        type=int,
+        default=10,
+        help='clip choice 1'
+    )
+    parser.add_argument(
+        '--time_t2',
+        type=int,
+        default=20,
+        help='clip choice 2'
+    )
     
     
     opt = parser.parse_args()
@@ -58,6 +70,8 @@ def main():
         print(f"you don't specify the resize_shot_edge, so the maximum resolution is set to {opt.max_resolution}")
     opt.device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
+    assert max(opt.time_t1, opt.time_t2) <= opt.steps and opt.time_t1 <= opt.time_t2, 'time step error'
+    
     # support two test mode: single image test, and batch test (through a txt file)
     if opt.prompt.endswith('.txt'):
         assert opt.prompt.endswith('.txt')
@@ -103,7 +117,7 @@ def main():
                 adapter_features, append_to_context = get_adapter_feature(cond, adapter) if cond != None else (None, None)
                 opt.prompt = prompt
                 result = diffusion_inference(opt, sd_model, sampler, adapter_features, append_to_context)
-                cv2.imwrite(os.path.join(opt.outdir, f'{base_count:05}_{opt.overlay}_useW={opt.wei}.png'), tensor2img(result))
+                cv2.imwrite(os.path.join(opt.outdir, f'{base_count:05}_{opt.overlay}_useW={opt.wei}_({opt.time_t1},{opt.time_t2}).png'), tensor2img(result))
 
 
 if __name__ == '__main__':
