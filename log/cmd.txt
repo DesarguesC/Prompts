@@ -1,5 +1,5 @@
 conda activate ldm
-sudo screen python test_overlay.py --prompt "With a bright wish, walking on an unpredictable path, falling into a deep valley, leaving behind the sound of struggling to trek, is to explore all the limits with infinite spiritual power. It is to lift the weapon forged by faith towards a stronger opponent, becoming a receiver of the power of the sun before the true light arrives, shining with scorching fire."  --sd_ckpt /root/autodl-tmp/models/v1-5-pruned.ckpt --overlay yes --n_samples 1 --outdir outputs/prompt-control/6 --time_t1 5 --time_t2 25 --steps 50
+python test_overlay.py --prompt "fire, wind, purple, dreamy cover, pretty girl. Love, LOVE, high resolution, highly detailed, 8K." --init_img ./inputs/0.png  --sd_ckpt /root/autodl-tmp/models/v1-5-pruned-emaonly.ckpt --overlay yes --n_samples 1 --outdir outputs/prompt-control/init/debug --time_t1 5 --time_t2 25 --steps 50
 
 
 

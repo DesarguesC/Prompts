@@ -2,12 +2,15 @@ import argparse
 import torch
 from omegaconf import OmegaConf
 from jieba import re
+import os
+from einops import repeat, rearrange
+from basicsr.utils import tensor2img, img2tensor
 
 from ldm.models.diffusion.ddim import DDIMSampler
 from ldm.models.diffusion.plms import PLMSSampler
 from ldm.modules.encoders.adapter import Adapter, StyleAdapter, Adapter_light
 from ldm.modules.extra_condition.api import ExtraCondition
-from ldm.util import fix_cond_shapes, load_model_from_config, read_state_dict
+from ldm.util import fix_cond_shapes, load_model_from_config, read_state_dict, load_img, resize_numpy_image, get_resize_shape
 
 DEFAULT_NEGATIVE_PROMPT = 'longbody, lowres, bad anatomy, bad hands, missing fingers, extra digit, ' \
                           'fewer digits, cropped, worst quality, low quality'
@@ -56,7 +59,7 @@ def get_base_argument_parser() -> argparse.ArgumentParser:
     )
     
     parser.add_argument(
-        '--img',
+        '--init_img',
         type=str,
         default=None,
         help='your init image path'
@@ -137,7 +140,7 @@ def get_base_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         '--f',
         type=int,
-        default=8,
+        default=2,
         help='downsampling factor',
     )
 
@@ -308,13 +311,27 @@ def diffusion_inference(opt, model, sampler, adapter_features, append_to_context
     if not hasattr(opt, 'H'):
         opt.H = 512
         opt.W = 512
-    shape = [opt.C, opt.H // opt.f, opt.W // opt.f]
     
-    if opt.img != None:
+    
+    if opt.init_img != None:
         assert os.path.isfile(opt.init_img)
-        init_image = load_img(opt.init_img).to(device)
-        init_image = repeat(init_image, '1 ... -> b ...', b=opt.C)
-        init_latent = model.get_first_stage_encoding(model.encode_first_stage(init_image))  # move to latent space
+        init_image, h, w = load_img(opt.init_img).to(opt.device)
+        opt.H, opt.W = h * opt.f, w * opt.f
+        
+        # init_image = repeat(init_image, '1 ... -> b ...', b=opt.C)
+        init_latent = model.get_first_stage_encoding(model.encode_first_stage(init_image))  # move to latent space -> tensor
+        # init_latent = rearrange(init_latent, 'b c h w -> (b c) h w')
+        # opt.H, opt.W = get_resize_shape(init_latent.shape, max_resolution=opt.max_resolution)
+        
+        print(init_latent.shape)
+        print(opt.H, opt.W)
+        
+        # init_latent = init_latent.reshape(-1,opt.H,opt.W)
+        
+        print(init_latent.shape)
+        
+    shape = [opt.C, opt.H // opt.f, opt.W // opt.f]
+    assert init_latent.shape[0] == shape[0]
     
     samples_latents, _ = sampler.sample(
         S=opt.steps,
@@ -326,7 +343,7 @@ def diffusion_inference(opt, model, sampler, adapter_features, append_to_context
         unconditional_guidance_scale=opt.scale,
         ori_unconditional_conditioning=ori_uc,
         unconditional_conditioning=uc,
-        x_T=None if opt.img is None else init_latent,
+        x_T=None if opt.init_img is None else init_latent,
         features_adapter=adapter_features,
         append_to_context=append_to_context,
         cond_tau=opt.cond_tau,
