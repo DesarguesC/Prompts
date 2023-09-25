@@ -6,7 +6,8 @@ tmp/*
 models/*
 nlpconnect/vit-gpt2-image-captioning/
 experiments/*
-
+outputs/*
+inputs/*
 
 *.DS_Store
 .idea
