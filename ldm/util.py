@@ -3,6 +3,7 @@ import math
 
 import cv2
 import torch
+from einops import rearrange
 import numpy as np
 
 import os
@@ -171,12 +172,18 @@ def load_model_from_config(config, ckpt, vae_ckpt=None, verbose=False):
     model.eval()
     return model
 
-def load_img(path):
+def load_img(opt):
+    path = opt.init_img
+    resize_short_edge = opt.resize_short_edge
+    max_resolution = opt.max_resolution
+    
     image = Image.open(path).convert("RGB")
+    # image = cv2.imread('images/dog.jpg')
+    # image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     w, h = image.size
     print(f"loaded input image of size ({w}, {h}) from {path}")
 
-    image = np.ndarray(image, dtype=np.float32)
+    image = np.asarray(image, dtype=np.float32)
     if resize_short_edge is not None:
         k = resize_short_edge / min(h, w)
     else:
@@ -185,18 +192,21 @@ def load_img(path):
     h = int(np.round(h * k / 64)) * 64
     w = int(np.round(w * k / 64)) * 64
     
-    if opt is not None:
-        try:
-            h *= opt.fac
-            w *= opt.fac
-        except:
-            raise NotImplementedError
+    assert opt.fac != None
+    assert opt.fac >= 0
     
-    image = cv2.resize(image, (w, h), interpolation=cv2.INTER_LANCZOS4)
+    h *= opt.fac
+    w *= opt.fac
+    
+    image = cv2.resize(image, (w,h), interpolation=cv2.INTER_LANCZOS4)
+    
     image = np.array(image).astype(np.float32) / 255.0
-    image = image[None].transpose(0, 3, 1, 2)
+    # print('before transpose: ', image.shape)
+    image = image[None].transpose(0, 3, 2, 1)
     image = torch.from_numpy(image)
-    return 2.*image - 1., h, w
+    print(image.shape)
+    
+    return 2.*image - 1., h, w, opt
 
 
 
@@ -213,8 +223,8 @@ def resize_numpy_image(image, max_resolution=512 * 512, resize_short_edge=None, 
     
     if opt is not None:
         try:
-            h *= opt.fac
-            w *= opt.fac
+            h //= opt.fac
+            w //= opt.fac
         except:
             raise NotImplementedError
     

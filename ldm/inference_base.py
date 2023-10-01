@@ -140,7 +140,7 @@ def get_base_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         '--f',
         type=int,
-        default=2,
+        default=8,
         help='downsampling factor',
     )
 
@@ -311,34 +311,24 @@ def diffusion_inference(opt, model, sampler, adapter_features, append_to_context
     if not hasattr(opt, 'H'):
         opt.H = 512
         opt.W = 512
-    
+    shape = [opt.C, opt.H // opt.f, opt.W // opt.f]
     
     if opt.init_img != None:
         assert os.path.isfile(opt.init_img)
-        init_image, h, w = load_img(opt.init_img).to(opt.device)
-        opt.H, opt.W = h * opt.f, w * opt.f
+        init_image, h, w, opt = load_img(opt)
+        init_image = init_image.to(opt.device)
+        opt.H, opt.W = h , w
         
         # init_image = repeat(init_image, '1 ... -> b ...', b=opt.C)
         init_latent = model.get_first_stage_encoding(model.encode_first_stage(init_image))  # move to latent space -> tensor
-        # init_latent = rearrange(init_latent, 'b c h w -> (b c) h w')
-        # opt.H, opt.W = get_resize_shape(init_latent.shape, max_resolution=opt.max_resolution)
-        
-        print(init_latent.shape)
-        print(opt.H, opt.W)
-        
-        # init_latent = init_latent.reshape(-1,opt.H,opt.W)
-        
-        print(init_latent.shape)
-        
-    shape = [opt.C, opt.H // opt.f, opt.W // opt.f]
-    assert init_latent.shape[0] == shape[0]
+        print(f'init_latent.shape = {init_latent.shape}, shape = {shape}')
     
     samples_latents, _ = sampler.sample(
         S=opt.steps,
-        ori_conditioning=ori_c,
-        conditioning=c,
         batch_size=1,
         shape=shape,
+        ori_conditioning=ori_c,
+        conditioning=c,
         verbose=False,
         unconditional_guidance_scale=opt.scale,
         ori_unconditional_conditioning=ori_uc,
