@@ -9,6 +9,7 @@ from torch import autocast
 from ldm.inference_base import (diffusion_inference, get_adapters, get_base_argument_parser, get_sd_models, str2bool)
 from ldm.modules.extra_condition import api
 from ldm.modules.extra_condition.api import (ExtraCondition, get_adapter_feature, get_cond_model)
+# from ldm.models.diffusion.ddim import ver
 
 torch.set_grad_enabled(False)
 
@@ -32,7 +33,7 @@ def main():
     parser.add_argument(
         '--overlay',
         type=str2bool,
-        default=0,
+        default=1,
         help='whether to overlay prompts that are cut',   # cut symbol: '|'
     )
     # parser.add_argument(
@@ -116,9 +117,11 @@ def main():
 
                 adapter_features, append_to_context = get_adapter_feature(cond, adapter) if cond != None else (None, None)
                 opt.prompt = prompt
-                result = diffusion_inference(opt, sd_model, sampler, adapter_features, append_to_context)
+                result, ts__ = diffusion_inference(opt, sd_model, sampler, adapter_features, append_to_context)
                 cv2.imwrite(os.path.join(opt.outdir, f'{base_count:05}_{opt.steps}_({opt.time_t1},{opt.time_t2}).png'), tensor2img(result))
+                print(ts__)
 
 
 if __name__ == '__main__':
     main()
+    # ver('print')

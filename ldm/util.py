@@ -292,3 +292,4 @@ def fix_cond_shapes(model, ori_prompt_condition, prompt_condition, uc, overlay=T
         # uc = torch.cat([uu for uu in uc_], dim)
         
     return ori_prompt_condition, ori_uc, condition_, uc_
+
