@@ -14,12 +14,12 @@ dependencies:
     - albumentations==0.4.3
     - diffusers==0.11.1
     - pytorch_lightning==1.5.9
-    - opencv-python==4.1.2.30
-    - pudb==2019.2
+    - opencv-python
+    - pudb
     - invisible-watermark==0.1.5
     - imageio==2.9.0
     - imageio-ffmpeg==0.4.2
-    - pytorch-lightning==1.4.2
+    - pytorch-lightning==1.5.9
     - imageio==2.9.0
     - imageio-ffmpeg==0.4.2
     - omegaconf==2.3.0
@@ -32,8 +32,14 @@ dependencies:
     - torchmetrics==0.6.0
     - kornia==0.6.8
     - k-diffusion==0.0.14
+    - gradio
+    - open-clip-torch
+    - jieba
+    - pycocotools
+    - matplotlib
+    - onnxruntime
+    - onnx
     - webdataset==0.2.35
     - safetensors==0.3.0
     - -e git+https://github.com/CompVis/taming-transformers.git@master#egg=taming-transformers
     - -e git+https://github.com/openai/CLIP.git@main#egg=clip
-    - -e .
