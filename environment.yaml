@@ -36,10 +36,12 @@ dependencies:
     - open-clip-torch
     - jieba
     - pycocotools
+    - IPython
     - matplotlib
     - onnxruntime
     - onnx
     - webdataset==0.2.35
     - safetensors==0.3.0
+    - timm
     - -e git+https://github.com/CompVis/taming-transformers.git@master#egg=taming-transformers
     - -e git+https://github.com/openai/CLIP.git@main#egg=clip
