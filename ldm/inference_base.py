@@ -6,7 +6,7 @@ import os
 from einops import repeat, rearrange
 from basicsr.utils import tensor2img, img2tensor
 
-from ldm.models.diffusion.ddim import DDIMSampler, ver
+from ldm.models.diffusion.ddim import DDIMSampler
 from ldm.models.diffusion.plms import PLMSSampler
 from ldm.modules.encoders.adapter import Adapter, StyleAdapter, Adapter_light
 from ldm.modules.extra_condition.api import ExtraCondition
@@ -323,7 +323,7 @@ def diffusion_inference(opt, model, sampler, adapter_features, append_to_context
         init_latent = model.get_first_stage_encoding(model.encode_first_stage(init_image))  # move to latent space -> tensor
         print(f'init_latent.shape = {init_latent.shape}, shape = {shape}')
     
-    samples_latents, _, *ts__ = sampler.sample(
+    samples_latents, _, ts = sampler.sample(
         S=opt.steps,
         batch_size=1,
         shape=shape,
@@ -346,4 +346,4 @@ def diffusion_inference(opt, model, sampler, adapter_features, append_to_context
     
     
 
-    return x_samples, ts__
+    return x_samples, ts

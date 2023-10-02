@@ -7,26 +7,15 @@ from tqdm import tqdm
 from ldm.modules.diffusionmodules.util import make_ddim_sampling_parameters, make_ddim_timesteps, noise_like, \
     extract_into_tensor
 
-def ver(ttt: str) -> int:
-    t1 = t2 = t = 0
-    while True:
-        if ttt == 't1':
-            t1 += 1
-            yield t1
-        elif ttt == 't2':
-            t2 += 1
-            yield t2
-        elif ttt == 't':
-            t += 1
-            yield t
-        elif ttt == 'print':
-            print('verification: ', (t1, t2, t))
 
 
 
 class DDIMSampler(object):
     def __init__(self, model, schedule="linear", **kwargs):
         super().__init__()
+        
+        self.t1__ = self.t2__ = self.ta__ = 0
+        
         self.model = model
         self.ddpm_num_timesteps = model.num_timesteps
         self.schedule = schedule
@@ -127,10 +116,10 @@ class DDIMSampler(object):
         
         # to_cut = kwargs['to_cut'] if 'to_cut' in kwargs.keys() else False
         overlay = kwargs['overlay'] if 'overlay' in kwargs.keys() else False
-        time_t1 = kwargs['time_t1'] if 'time_t1' in kwargs.keys() else 0
-        time_t2 = kwargs['time_t2'] if 'time_t2' in kwargs.keys() else 1
+        time_t1 = kwargs['t1'] if 't1' in kwargs.keys() else 0
+        time_t2 = kwargs['t2'] if 't2' in kwargs.keys() else 1
         
-        samples, intermediates, *ts__ = self.ddim_sampling(ori_conditioning, conditioning, size,
+        samples, intermediates = self.ddim_sampling(ori_conditioning, conditioning, size,
                                                     callback=callback,
                                                     img_callback=img_callback,
                                                     quantize_denoised=quantize_x0,
@@ -150,7 +139,7 @@ class DDIMSampler(object):
                                                     cond_tau=cond_tau, style_cond_tau=style_cond_tau, 
                                                     overlay=overlay, t1=time_t1, t2=time_t2
                                                     )
-        return samples, intermediates, ts__
+        return samples, intermediates, (self.t1__,self.t2__, self.ta__)
 
     @torch.no_grad()
     def ddim_sampling(self, ori_cond, cond, shape,
@@ -178,11 +167,13 @@ class DDIMSampler(object):
         elif timesteps is not None and not ddim_use_original_steps:
             subset_end = int(min(timesteps / self.ddim_timesteps.shape[0], 1) * self.ddim_timesteps.shape[0]) - 1
             timesteps = self.ddim_timesteps[:subset_end]
+        
 
         intermediates = {'x_inter': [img], 'pred_x0': [img]}
         time_range = reversed(range(0, timesteps)) if ddim_use_original_steps else np.flip(timesteps)
         total_steps = timesteps if ddim_use_original_steps else timesteps.shape[0]
         print(f"Running DDIM Sampling with {total_steps} timesteps")
+        self.act_timesteps = total_steps
 
         iterator = tqdm(time_range, desc='DDIM Sampler', total=total_steps)
 
@@ -195,7 +186,7 @@ class DDIMSampler(object):
                 img_orig = self.model.q_sample(x0, ts)  # TODO: deterministic forward pass?
                 img = img_orig * mask + (1. - mask) * img
 
-            img, pred_x0, *ts__ = self.p_sample_ddim(img, ori_cond, cond, ts, index=index, use_original_steps=ddim_use_original_steps,
+            outs = self.p_sample_ddim(img, ori_cond, cond, ts, index=index, use_original_steps=ddim_use_original_steps,
                                       quantize_denoised=quantize_denoised, temperature=temperature,
                                       noise_dropout=noise_dropout, score_corrector=score_corrector,
                                       corrector_kwargs=corrector_kwargs,
@@ -207,7 +198,7 @@ class DDIMSampler(object):
                                           (1 - style_cond_tau) * total_steps) else append_to_context,
                                       overlay=overlay, t1=t1,t2=t2
                                       )
-            
+            img, pred_x0 = outs
             if callback: callback(i)
             if img_callback: img_callback(pred_x0, i)
 
@@ -215,7 +206,7 @@ class DDIMSampler(object):
                 intermediates['x_inter'].append(img)
                 intermediates['pred_x0'].append(pred_x0)
 
-        return img, intermediates, ts__
+        return img, intermediates
 
     @torch.no_grad()
     def p_sample_ddim(self, x, ori_c, c, t, index, repeat_noise=False, use_original_steps=False, quantize_denoised=False,
@@ -228,20 +219,22 @@ class DDIMSampler(object):
         overlay = kwargs['overlay'] if 'overlay' in kwargs else False
         t1 = kwargs['t1'] if 't1' in kwargs.keys() else 0
         t2 = kwargs['t2'] if 't2' in kwargs.keys() else 1
+        # assert t1 > 0 and t2 >1, f't1={t1}, t2={t2}'
         
-        global t1__, t2__, t__
-        t1__ = t2__ = t__ = 0
+        
         
         if isinstance(c, list):
             assert isinstance(unconditional_conditioning, list), 'cut failed assertion'
         else:
             assert not isinstance(unconditional_conditioning, list), 'original error'
             assert len(c)==len(unconditional_conditioning), 'length error exsits in fix_shape function'
-
+        
+        # global model_output
+        
         if ori_unconditional_conditioning is None or unconditional_conditioning is None \
                                                             or unconditional_guidance_scale == 1.:
-            if t > t2 or not overlay:
-                t__ = ver('t')
+            if self.act_timesteps - index > t2 or not overlay:
+                self.ta__ += 1
                 # not to cut prompt => model_output is ought to be not a list
                 if append_to_context is not None:
                     model_output = self.model.apply_model(x, t, torch.cat([ori_c, append_to_context], dim=1),
@@ -249,13 +242,13 @@ class DDIMSampler(object):
                 else:
                     model_output = self.model.apply_model(x, t, ori_c, features_adapter=features_adapter)
                     
-            elif t <= t1:
-                t1__ = ver('t1')
+            elif self.act_timesteps - index <= t1:
+                self.t1__ += 1
                 # prompt cut
                 if isinstance(c, list):
-                    assert isinstance(unconditioinal_conditioning, list), 'cut failed assertion'
+                    assert isinstance(unconditional_conditioning, list), 'cut failed assertion'
                 else:
-                    assert not isinstance(unconditioinal_conditioning, list), 'original error'
+                    assert not isinstance(unconditional_conditioning, list), 'original error'
                     
                 if append_to_context is not None:
                     model_output = [self.model.apply_model(x, t, torch.cat([c_, append_to_context], dim=1),
@@ -263,8 +256,9 @@ class DDIMSampler(object):
                 else:
                     model_output = [self.model.apply_model \
                                     (x, t, c_, features_adapter=features_adapter) for c_ in c if c_ != None]
-            elif t > t1 and t <= t2:
-                t2__ = ver('t2')
+            else:
+                # self.act_timesteps - index > t1 and index <= t2:
+                self.t2__ += 1
                 prompt_conditioning = torch.cat([pp for pp in c], dim=1)
                 if append_to_context is not None:
                     model_output = self.model.apply_model(x, t, torch.cat([prompt_conditioning, append_to_context], dim=1),
@@ -275,8 +269,8 @@ class DDIMSampler(object):
                 
                     
         else:
-            if t > t2 or not overlay:
-                t__ = ver('t')
+            if self.act_timesteps - index > t2 or not overlay:
+                self.ta__ += 1
                     
                 x_in = torch.cat([x] * 2)
                 t_in = torch.cat([t] * 2)
@@ -309,9 +303,9 @@ class DDIMSampler(object):
                 model_uncond, model_t = self.model.apply_model(x_in, t_in, c_in, features_adapter=features_adapter).chunk(2)
                 model_output = model_uncond + unconditional_guidance_scale * (model_t - model_uncond)
             
-            elif t1 < t and t <= t2:
+            elif t1 < self.act_timesteps - index and self.act_timesteps - index <= t2:
                 # overlay => torch.cat
-                t2__ = ver('t2')
+                self.t2__ += 1
                 c = torch.cat([pp for pp in c], dim=1)
                 unconditional_conditioning = torch.cat([pp for pp in unconditional_conditioning], dim=1)
                 
@@ -346,8 +340,9 @@ class DDIMSampler(object):
                 model_uncond, model_t = self.model.apply_model(x_in, t_in, c_in, features_adapter=features_adapter).chunk(2)
                 model_output = model_uncond + unconditional_guidance_scale * (model_t - model_uncond)
             
-            elif t <= t1:
-                t1__ = ver('t1')
+            else:
+                # self.act_timesteps - index <= t1:
+                self.t1__ += 1
                 # list sum
                 if isinstance(c, list):
                     assert isinstance(unconditional_conditioning, list), 'cut failed assertion'
@@ -393,27 +388,27 @@ class DDIMSampler(object):
         # assert len(c) == len(model_output), 'appendance error'
         
         if self.model.parameterization == "v":
-            if t > t1 or not overlay:
+            if self.act_timesteps - index > t1 or not overlay:
                 # case - 't <= t2 and t > t2' included
                 e_t = self.model.predict_eps_from_z_and_v(x, t, model_output)
-            elif t <= t1:
+            elif self.act_timesteps - index <= t1:
                 e_t = sum([self.model.predict_eps_from_z_and_v(x, t, _output_) for _output_ in model_output]) / torch.tensor([len(model_output)*1.], dtype=torch.float32).sqrt().to(device)  # float32 or float64 ?
-            elif t > t1 and t <= t2:
+            elif self.act_timesteps - index > t1 and self.act_timesteps - index <= t2:
                 pass
         
         else:
-            if t > t1 or not overlay:
+            if self.act_timesteps - index > t1 or not overlay:
                 # case - 't <= t2 and t > t2' included
                 e_t = model_output
-            elif t <= t1:
+            elif self.act_timesteps - index <= t1:
                 e_t = sum([_output_ for _output_ in model_output]) / torch.tensor([len(model_output)*1.], dtype=torch.float32).sqrt().to(device)
 
         if score_corrector is not None:
             assert self.model.parameterization == "eps", 'not implemented'
-            if t > t1 or not overlay:
+            if self.act_timesteps - index > t1 or not overlay:
                 # case - 't <= t2 and t > t2' included
                 e_t = score_corrector.modify_score(self.model, e_t, x, t, c, **corrector_kwargs)
-            elif t <= t1:
+            elif self.act_timesteps - index <= t1:
                 e_t = sum([score_corrector.modify_score(self.model, e_t, x, t, c__, **corrector_kwargs) for c__ in c]) / torch.tensor([len(c)*1.], dtype=torch.float32).sqrt().to(device)
 
         alphas = self.model.alphas_cumprod if use_original_steps else self.ddim_alphas
@@ -440,7 +435,7 @@ class DDIMSampler(object):
         if noise_dropout > 0.:
             noise = torch.nn.functional.dropout(noise, p=noise_dropout)
         x_prev = a_prev.sqrt() * pred_x0 + dir_xt + noise
-        return x_prev, pred_x0, (t1__,t2__,t__)
+        return x_prev, pred_x0
 
     @torch.no_grad()
     def stochastic_encode(self, x0, t, use_original_steps=False, noise=None):

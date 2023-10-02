@@ -117,9 +117,9 @@ def main():
 
                 adapter_features, append_to_context = get_adapter_feature(cond, adapter) if cond != None else (None, None)
                 opt.prompt = prompt
-                result, ts__ = diffusion_inference(opt, sd_model, sampler, adapter_features, append_to_context)
-                cv2.imwrite(os.path.join(opt.outdir, f'{base_count:05}_{opt.steps}_({opt.time_t1},{opt.time_t2}).png'), tensor2img(result))
-                print(ts__)
+                result, ts = diffusion_inference(opt, sd_model, sampler, adapter_features, append_to_context)
+                cv2.imwrite(os.path.join(opt.outdir, f'{base_count:02}_{opt.steps}_({opt.time_t1},{opt.time_t2}).png'), tensor2img(result))
+                print(ts)
 
 
 if __name__ == '__main__':
