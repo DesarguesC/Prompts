@@ -70,8 +70,9 @@ def main():
     if opt.resize_short_edge is None:
         print(f"you don't specify the resize_short_edge, so the maximum resolution is set to {opt.max_resolution}")
     opt.device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
-
-    assert max(opt.time_t1, opt.time_t2) <= opt.steps and opt.time_t1 <= opt.time_t2, 'time step error'
+    
+    if opt.overlay:
+        assert max(opt.time_t1, opt.time_t2) <= opt.steps and opt.time_t1 <= opt.time_t2, 'time step error'
     
     # support two test mode: single image test, and batch test (through a txt file)
     if opt.prompt.endswith('.txt'):
@@ -118,7 +119,8 @@ def main():
                 adapter_features, append_to_context = get_adapter_feature(cond, adapter) if cond != None else (None, None)
                 opt.prompt = prompt
                 result, ts = diffusion_inference(opt, sd_model, sampler, adapter_features, append_to_context)
-                cv2.imwrite(os.path.join(opt.outdir, f'{base_count:02}_{opt.steps}_({opt.time_t1},{opt.time_t2}).png'), tensor2img(result))
+                cv2.imwrite(os.path.join(opt.outdir, f'ToT{opt.steps}_({opt.time_t1},{opt.time_t2}).png'), tensor2img(result))
+                # {base_count:02}
                 print(ts)
 
 
