@@ -33,3 +33,7 @@ safetensors==0.3.0
 timm
 -e git+https://github.com/CompVis/taming-transformers.git@master#egg=taming-transformers
 -e git+https://github.com/openai/CLIP.git@main#egg=clip
+datasets==2.8.0
+seaborn
+openai
+git+https://github.com/crowsonkb/k-diffusion.git

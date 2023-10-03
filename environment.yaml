@@ -16,6 +16,9 @@ dependencies:
     - pytorch_lightning==1.5.9
     - opencv-python
     - pudb
+    - datasets==2.8.0
+    - torchmetrics==0.6.0
+    - seaborn
     - invisible-watermark==0.1.5
     - imageio==2.9.0
     - imageio-ffmpeg==0.4.2
@@ -40,8 +43,10 @@ dependencies:
     - matplotlib
     - onnxruntime
     - onnx
+    - openai
     - webdataset==0.2.35
     - safetensors==0.3.0
     - timm
     - -e git+https://github.com/CompVis/taming-transformers.git@master#egg=taming-transformers
     - -e git+https://github.com/openai/CLIP.git@main#egg=clip
+    - git+https://github.com/crowsonkb/k-diffusion.git
